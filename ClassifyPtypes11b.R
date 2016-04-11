@@ -5,6 +5,7 @@
 # which has 176-22~ of each ptype in each 
 # training set. Depends on number of IP 
 # available in the training set
+# 88% accuracy, but most 8 correctly classified IP obs. 
 # This script utilizes add.noise
 # but tries to utilize as many true IP obs
 # as possible, only adding noised copies to fill
@@ -13,7 +14,7 @@
 # Outlyer Snow in miami has been removed. 
 
 rm(list=ls())
-setwd('/Users/tchott/Documents/Capstone')
+setwd('/Users/tchott/Documents/NOAA')
 load("predictors.RData")
 library(ggplot2)
 library(caret)
