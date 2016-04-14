@@ -36,6 +36,10 @@ displayVTempR <- function(X){
 z <- sample(1:nrow(Twb.prof),1)
 displayVTempR(z)
 
+##REDUCING TO JUST IP AND FZRA
+ipfz.rows<-which(ptype=='FZRA' |ptype=="IP")
+
+
 nptype<-matrix(0,nrow=nrow(Twb.prof),ncol=1)  ##Setting up my pytpes as a 4 columns indicating ptype
 for ( i in 1:nrow(Twb.prof)){
   if (ptype[i]=='RA') {nptype[i]<-1}
@@ -142,7 +146,12 @@ nnetPred<-function(X,para=list()){
   predicted_class<-apply(scores,1,which.max)
   return(predicted_class)
 }
-
+bal.train.rows<-list()
+bal.cv.rows<-list()
+bal.test.rows<-list()
+reference.rows<-array()
+train.nn<-array()
+test.nn<-array()
 ##Creating Testing, CV, and Training Sets
 for(i in 1:12){
   train.years=1996:2000+i-1
@@ -152,13 +161,13 @@ for(i in 1:12){
   
   train.labels=head(which((years>=train.years[1] & months >8)),1):tail(which(years<=train.years[5]+1 & months <6),1)
   test.labels=which((years==test.years & months>8) | (years==test.years+1 & months < 6))
-  
   set.seed(3456)
+  
   train.rows=which(date.ind%in%train.labels)
   test.rows=which(date.ind%in%test.labels)
   ptype.temp<-ptype[train.rows]
   s.size<-length(which(ptype.temp=='IP'))
-  train.bal<-c(sample(which(ptype.temp=='RA'),s.size), sample(which(ptype.temp=='SN'),s.size),sample(which(ptype.temp=='FZRA'),s.size),sample(which(ptype.temp=='IP'),s.size) )
+  train.bal<-c(sample(which(ptype.temp=='FZRA'),s.size),sample(which(ptype.temp=='IP'),s.size) )
   bal.train.rows[[i]]<-train.rows[train.bal]
   bal.cv.rows[[i]]<-train.rows[-train.bal]
   bal.test.rows[[i]]<-test.rows
@@ -189,45 +198,57 @@ for (i in 1:12){
   Xt.proc <- Xt[,]/max(X) # scale CV data
   Y <-matrix(0, N, K) 
   for (j in 1:N){
-    Y[j, y[j]]<- 1
+    Y[j, y[j]-2]<- 1
   }
   set.nnet <- nnet(X.proc, Y, Xcv.proc, ycv, h=10, step_size = 0.3, reg = 0.00, niteration =1000)
   noaa.nnet[[i]]<-set.nnet
   predicted_class <- nnetPred(Xcv.proc, set.nnet[[1]])
-  print(paste('cv set accuracy:', mean(predicted_class == (ycv))))
+  print(paste('cv set accuracy:', mean(predicted_class+2 == (ycv))))
   predicted_class <- nnetPred(Xt.proc, set.nnet[[1]])
-  print(paste('testing accuracy:',mean(predicted_class == (yt))))
+  print(paste('testing accuracy:',mean(predicted_class+2 == (yt))))
   predicted<-c(predicted,predicted_class)
   true<-c(true,nptype[bal.test.rows[[i]]])
 }
 predicted<-predicted[2:length(predicted)]
 true<-true[2:length(true)]
-saveRDS(noaa.nnet, "noaannet10e.rds")
-saveRDS(predicted, "predicted10e.rds")
-saveRDS(true, "true10e.rds")
+#saveRDS(noaa.nnet, "noaannet10e.rds")
+#saveRDS(predicted, "predicted10e.rds")
+#saveRDS(true, "true10e.rds")
 print(paste('overall testing accuracy: ', mean(predicted==true)))
 
 confusionMatrix(predicted,true)
 
-#lets choose a random SNOW, IP and FZ Rain Observation and plot
 
-par(mfrow=c(1,3))
-ra<-sample(which(nptype==1), size=1)
-sn<-sample(which(nptype==2), size=1)
-fz<-sample(which(nptype==3), size=1)
-ip<-sample(which(nptype==4), size=1)
-#displayVTempR(ra)
-displayVTempR(sn)
-displayVTempR(fz)
-displayVTempR(ip)
 
-#Now for the misclassified from nnet: 
-par(mfrow=c(1,1))
-rat.fzp<-sample(which(predicted==3&true==1),size=1)
-displayVTempR(reference.rows[rat.fzp])
+train.nn<-array()
+test.nn<-array()
+bal.train.rows<-list()
+bal.test.rows<-list()
+bal.cv.rows<-list()
+reference.rows<-array()
+ip.length<-array()
+fz.length<-array()
 
-fzt.rap<-sample(which(predicted==1&true==3),size=1)
-displayVTempR(reference.rows[fzt.rap])
+##Creating Testing, CV, and Training Sets
+for(i in 1:12){
+  train.years=1996:2000+i-1
+  test.years=2000+i
+  
+  print(i)
+  
+  train.labels=head(which((years>=train.years[1] & months >8)),1):tail(which(years<=train.years[5]+1 & months <6),1)
+  test.labels=which((years==test.years & months>8) | (years==test.years+1 & months < 6))
+  
+  set.seed(3456)
+  train.rows=which(date.ind%in%train.labels)
+  test.rows=which(date.ind%in%test.labels)
+  ptype.temp<-ptype[test.rows]
+  ip.length[i]<-length(which(ptype.temp=='IP'))
+  fz.length[i]<-length(which(ptype.temp=='FZRA'))
+  
+}
 
+sum(ip.length)
+sum(fz.length)
 
 

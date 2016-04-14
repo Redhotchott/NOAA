@@ -178,6 +178,7 @@ bal.test.rows<-list()
 bal.cv.rows<-list()
 reference.rows<-array()
 ip.length<-array()
+fz.length<-array()
 
 ##Creating Testing, CV, and Training Sets
 for(i in 1:12){
@@ -194,6 +195,7 @@ for(i in 1:12){
   test.rows=which(date.ind%in%test.labels)
   ptype.temp<-ptype[train.rows]
   ip.length[i]<-length(which(ptype.temp=='IP'))
+  fz.length[i]<-length(which(ptype.temp=='FZRA'))
   train.bal<-c(sample(which(ptype.temp=='IP'),ip.length[[i]]), sample(which(ptype.temp=='SN'),300),sample(which(ptype.temp=='FZRA'),300),sample(which(ptype.temp=='RA'),300) )
   bal.train.rows[[i]]<-train.rows[train.bal]
   bal.cv.rows[[i]]<-train.rows[-train.bal]
