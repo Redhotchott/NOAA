@@ -1,7 +1,7 @@
 #### Set up NN on data ###
 
 ######ABOUT THIS SCRIPT#####
-# This classify Ptypes script will attempt 
+# This clas sify Ptypes script will attempt 
 # to balance the training classes across 12 
 # traininng sets 12 disjoint testing sets.
 # Goal is to beat 90.94% accuracy
