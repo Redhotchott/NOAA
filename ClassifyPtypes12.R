@@ -158,14 +158,17 @@ nnetPred<-function(X,para=list()){
   hidden_layer <- matrix(hidden_layer, nrow = N)
   scores <- hidden_layer%*%W2 + matrix(rep(b2,N), nrow = N, byrow = T)
   predicted_class<-apply(scores,1,which.max)
-  return(predicted_class)
+  print(head(scores))
+  return(c(predicted_class,scores))
 }
 
 nnet.mnist <- nnet(X.proc, Y, Xcv.proc, ycv, h=10, step_size = 0.3, reg = 0.001, niteration =150)
-predicted_class <- nnetPred(Xcv.proc, nnet.mnist)
+predicted_class <- nnetPred(Xcv.proc, nnet.mnist)[[1]]
 print(paste('cv set accuracy:', mean(predicted_class == (ycv))))
+scores<-nnetPred(Xcv.proc, nnet.mnist)[[2]]
+which.wrong<-scores[which(predicted_class!=ycv)]
 
-predicted_class <- nnetPred(Xt.proc, nnet.mnist)
+predicted_class <- nnetPred(Xt.proc, nnet.mnist)[[1]]
 print(paste('testing accuracy:',mean(predicted_class == (yt))))
 
 confusionMatrix(predicted_class,yt)

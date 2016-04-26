@@ -223,9 +223,9 @@ for (i in 1:12){
 }
 predicted<-predicted[2:length(predicted)]
 true<-true[2:length(true)]
-saveRDS(noaa.nnet, "noaannet10f.rds")
-saveRDS(predicted, "predicted10f.rds")
-saveRDS(true, "true10f.rds")
+# saveRDS(noaa.nnet, "noaannet10f.rds")
+# saveRDS(predicted, "predicted10f.rds")
+# saveRDS(true, "true10f.rds")
 print(paste('overall testing accuracy: ', mean(predicted==true)))
 
 confusionMatrix(predicted,true)

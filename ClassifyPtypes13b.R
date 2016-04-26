@@ -1,10 +1,10 @@
 #### Set up NN on data ###
 
 ######ABOUT THIS SCRIPT#####
-# This classify Ptypes script will attempt 
-# to just differentiate between IP and FZRA.  
-# Balanced IP/FZRA through the train, CV, and test sets
-# working on the break in the loop currently. 
+# This classify Ptypes script  is an 
+# attempt to use PCA with 2 vectors to 
+# classify the data. PCA done over entire data
+# 0.37671442969195
 # Only temp as input
 # Outlyer Snow in miami has been removed. 
 
@@ -32,56 +32,59 @@ displayVTempR <- function(X){
   abline(v=273.15, col='Red')
   print(paste("Precipitation Type:", ptype[X]))
 }
-
 z <- sample(1:nrow(Twb.prof),1)
 displayVTempR(z)
 
-##REDUCING TO JUST IP AND FZRA
-ipfz.rows<-which(ptype=='FZRA' |ptype=="IP")
-ip.rows<-which(ptype=='IP')
-Twb.prof<-Twb.prof[ipfz.rows,]
-ptype<-ptype[ipfz.rows]
-
 nptype<-matrix(0,nrow=nrow(Twb.prof),ncol=1)  ##Setting up my pytpes as a 4 columns indicating ptype
 for ( i in 1:nrow(Twb.prof)){
-  if (ptype[i]=='FZRA') {nptype[i]<-1}
-  if (ptype[i]=='IP') {nptype[i]<-2}
+  if (ptype[i]=='RA') {nptype[i]<-1}
+  if (ptype[i]=='SN') {nptype[i]<-2}
+  if (ptype[i]=='FZRA') {nptype[i]<-3}
+  if (ptype[i]=='IP') {nptype[i]<-4}
 }
 
+nnet.mnist.prev<-list()
 par(mfrow=c(1,2))
-nnet <- function(X, Y, Xcv.proc, ycv, step_size = 0.5, reg = 0.05, h = 10, niteration){ 
-  acc.prev=0
-  # set up linear decay of the example: 
-  decay<-seq(from=step_size,to=0, by=-step_size/(niteration-1))
-  decay<-c(step_size,decay)
+nnet <- function(X, Y, Xcv.proc, ycv, step_size = 0.5, reg = 0.05, h = 10, niteration){  
   # get dim of input  
   N <- nrow(X) # number of examples  
   K <- ncol(Y) # number of classes  
   D <- ncol(X) # dimensionality   
   # initialize parameters randomly  
-  set.seed(101)
+  set.seed(3456)
   W <- 0.01 * matrix(rnorm(D*h), nrow = D)  
   b <- matrix(0, nrow = 1, ncol = h)  
   W2 <- 0.01 * matrix(rnorm(h*K), nrow = h)  
-  b2 <- matrix(0, nrow = 1, ncol = K)   
+  b2 <- matrix(0, nrow = 1, ncol = K) 
   # gradient descent loop to update weight and bias
   lossvec<-rep(0,niteration)
   cvaccvec<-rep(0,niteration)
+  loss.prev<-100
+  acc.prev<-.01
+  acc.now<-0.011
   for (i in 0:niteration){    
     # hidden layer, ReLU activation    
     hidden_layer <- pmax(0, X%*% W + matrix(rep(b,N), nrow = N, byrow = T))    
     hidden_layer <- matrix(hidden_layer, nrow = N)    
     # class score    
-    scores <- hidden_layer%*%W2 + matrix(rep(b2,N), nrow = N, byrow = T)     
+    scores <- hidden_layer%*%W2 + matrix(rep(b2,N), nrow = N, byrow = T)  
     # compute and normalize class probabilities    
     exp_scores <- exp(scores)    
     probs <- exp_scores / rowSums(exp_scores)     
     # compute the loss: sofmax and regularization    
-    correct_logprobs <- -log(probs)    
+    correct_logprobs <- -log(probs)
     data_loss <- sum(correct_logprobs*Y)/N    
     reg_loss <- 0.5*reg*sum(W*W) + 0.5*reg*sum(W2*W2)    
     loss <- data_loss + reg_loss  
     lossvec[i]<-loss
+    if(i>200){
+      if(loss>loss.prev | acc.prev>acc.now){
+        print(paste('Stopping at iteration: ', i))
+        break
+      }
+    }
+    
+    loss.prev<-loss
     # check progress    
     if (i%%100 == 0 | i == niteration){      
       print(paste("iteration", i,': loss', loss))
@@ -103,15 +106,17 @@ nnet <- function(X, Y, Xcv.proc, ycv, step_size = 0.5, reg = 0.05, h = 10, niter
     dW2 <- dW2 + reg *W2    
     dW <- dW + reg *W     
     # update parameter     
-    W <- W-decay[i+1]*dW    
-    b <- b-decay[i+1]*db    
-    W2 <- W2-decay[i+1]*dW2    
-    b2 <- b2-decay[i+1]*db2  
-    nnet.prev<-nnet.mnist
+    W <- W-step_size*dW    
+    b <- b-step_size*db    
+    W2 <- W2-step_size*dW2    
+    b2 <- b2-step_size*db2  
+    nnet.mnist.prev<-nnet.mnist
     nnet.mnist<-list(W, b, W2, b2)
+    if(i>200 & loss>loss.prev){print('reached')}
     predicted_class <- nnetPred(Xcv.proc, nnet.mnist)
+    acc.now<-mean(predicted_class == (ycv))
     cvaccvec[i] <-mean(predicted_class == (ycv))
-    if(i>1){if(cvaccvec[i]<cvaccvec[i-1]){break}}
+    acc.prev<-cvaccvec[i-1]
     if (i%%100 == 0 | i == niteration){      
       print(paste("iteration", i,': accuracy', mean(predicted_class==(ycv))))
     }  
@@ -120,7 +125,7 @@ nnet <- function(X, Y, Xcv.proc, ycv, step_size = 0.5, reg = 0.05, h = 10, niter
   lines(lossvec)
   plot(cvaccvec, main='Accuracy', xlab='iteration', ylab='accuracy', type='n')
   lines(cvaccvec)
-  return(list(W, b, W2, b2,lossvec,cvaccvec,predicted_class))
+  return(list(nnet.mnist.prev,lossvec,cvaccvec,predicted_class))
 }
 
 nnetPred<-function(X,para=list()){
@@ -137,40 +142,6 @@ nnetPred<-function(X,para=list()){
 }
 
 
-full<-1:length(ptype)
-train.bal<-c(sample(which(ptype=='FZRA'),250),sample(which(ptype=='IP'),250) )
-full<-full[-train.bal]
-cv.bal<-c(sample(which(ptype[full]=='FZRA'),250),sample(which(ptype[full]=='IP'),250) )
-full<-full[-cv.bal]
-test.bal<-c(sample(which(ptype[full]=='FZRA'),250),sample(which(ptype[full]=='IP'),250))
-
-X <- Twb.prof[train.bal,] #data matrix (each row = single example)
-N <- nrow(X)# number of examples 
-y <- nptype[train.bal,] # class labels
-K <- length(unique(y)) #number of classes
-X.proc <- X[,]/max(X) #scale (temp data)
-D <- ncol(X.proc) #dimensionality 
-Xcv <- Twb.prof[cv.bal,] #testing data
-ycv <-nptype[cv.bal,]# class labels
-Xcv.proc <- Xcv[,]/max(X) # scale CV data
-Xt <- Twb.prof[test.bal,] #testing data
-yt <-nptype[test.bal,]# class labels
-Xt.proc <- Xt[,]/max(X) # scale CV data
-Y <-matrix(0, N, K) 
-for (j in 1:N){
-  Y[j, y[j]]<- 1
-}
-
-nnet.mnist<-list()
-nnet.mnist <- nnet(X.proc, Y, Xcv.proc, ycv, h=10, step_size = 0.01, reg = 0.01, niteration =10000)
-
-predicted_class <- nnetPred(Xcv.proc, nnet.mnist)
-print(paste('cv set accuracy:', mean(predicted_class== (ycv))))
-predicted_class <- nnetPred(Xt.proc, nnet.mnist)
-print(paste('testing accuracy:',mean(predicted_class == (yt))))
-
-confusionMatrix(predicted_class,yt)
-
 
 
 train.nn<-array()
@@ -180,7 +151,6 @@ bal.test.rows<-list()
 bal.cv.rows<-list()
 reference.rows<-array()
 ip.length<-array()
-fz.length<-array()
 
 ##Creating Testing, CV, and Training Sets
 for(i in 1:12){
@@ -195,13 +165,69 @@ for(i in 1:12){
   set.seed(3456)
   train.rows=which(date.ind%in%train.labels)
   test.rows=which(date.ind%in%test.labels)
-  ptype.temp<-ptype[test.rows]
+  ptype.temp<-ptype[train.rows]
   ip.length[i]<-length(which(ptype.temp=='IP'))
-  fz.length[i]<-length(which(ptype.temp=='FZRA'))
-  
+  if(i==7){
+    train.bal<-c(sample(which(ptype.temp=='IP'), 300), sample(which(ptype.temp=='SN'),300),sample(which(ptype.temp=='FZRA'),300),sample(which(ptype.temp=='RA'),300))
+  }
+  else{  train.bal<-c(sample(which(ptype.temp=='IP'), ip.length[i]), sample(which(ptype.temp=='SN'),300),sample(which(ptype.temp=='FZRA'),300),sample(which(ptype.temp=='RA'),300))
+  }
+  bal.train.rows[[i]]<-train.rows[train.bal]
+  bal.cv.rows[[i]]<-train.rows[-train.bal]
+  bal.test.rows[[i]]<-test.rows
+  train.nn[i]=length(train.rows)
+  test.nn[i]=length(test.rows)
+  reference.rows<-c(reference.rows,test.rows)
 }
-
-sum(ip.length)
-sum(fz.length)
+reference.rows<-reference.rows[2:length(reference.rows)]
 
 
+##Using PCA analysis
+cov.Twb<-cov(Twb.prof)
+e.vecs<-eigen(cov.Twb)$vectors[,1:4]
+Twb.prof.m<-Twb.prof%*%e.vecs
+
+
+## Creating the 12 neural networks
+noaa.nnet<-list()
+nnet.mnist<-list()
+predicted<-array()
+true<-array()
+
+for (i in 1:12){
+  print(paste('SET NUMBER: ', i))
+  X <- Twb.prof.m[bal.train.rows[[i]],] #data matrix (each row = single example)
+  if(i!=7){X <-rbind(X,X[1:(300-ip.length[i]),])}
+  N <- nrow(X)# number of examples 
+  y <- nptype[bal.train.rows[[i]],] # class labels
+  if(i!=7){y <- c(y, y[1:(300-ip.length[i])])}
+  K <- length(unique(y)) #number of classes
+  X.proc <- X[,]/max(X) #scale (temp data)
+  D <- ncol(X.proc) #dimensionality 
+  Xcv <- Twb.prof.m[bal.cv.rows[[i]],] #testing data
+  ycv <-nptype[bal.cv.rows[[i]],]# class labels
+  Xcv.proc <- Xcv[,]/max(X) # scale CV data
+  Xt <- Twb.prof.m[bal.test.rows[[i]],] #testing data
+  yt <-nptype[bal.test.rows[[i]],]# class labels
+  Xt.proc <- Xt[,]/max(X) # scale CV data
+  Y <-matrix(0, N, K) 
+  for (j in 1:N){
+    Y[j, y[j]]<- 1
+  }
+  set.nnet <- nnet(X.proc, Y, Xcv.proc, ycv, h=10, step_size = 0.3, reg = 0.00, niteration =1000)
+  noaa.nnet[[i]]<-set.nnet
+  predicted_class <- nnetPred(Xcv.proc, set.nnet[[1]])
+  print(paste('cv set accuracy:', mean(predicted_class == (ycv))))
+  predicted_class <- nnetPred(Xt.proc, set.nnet[[1]])
+  print(paste('testing accuracy:',mean(predicted_class == (yt))))
+  predicted<-c(predicted,predicted_class)
+  true<-c(true,nptype[bal.test.rows[[i]]])
+}
+predicted<-predicted[2:length(predicted)]
+true<-true[2:length(true)]
+saveRDS(noaa.nnet, "noaannet13b.rds")
+saveRDS(predicted, "predicted13b.rds")
+saveRDS(true, "true13b.rds")
+print(paste('overall testing accuracy: ', mean(predicted==true)))
+
+confusionMatrix(predicted,true)
