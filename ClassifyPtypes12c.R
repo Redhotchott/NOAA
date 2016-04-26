@@ -152,8 +152,10 @@ bal.test.rows<-list()
 bal.cv.rows<-list()
 reference.rows<-array()
 ip.length<-array()
+fz.length<-array()
 
 ##Creating Testing, CV, and Training Sets
+par(mfrow=c(1,1))
 for(i in 1:12){
   train.years=1996:2000+i-1
   test.years=2000+i
@@ -168,6 +170,16 @@ for(i in 1:12){
   test.rows=which(date.ind%in%test.labels)
   ptype.temp<-ptype[train.rows]
   ip.length[i]<-length(which(ptype.temp=='IP'))
+  fz.length[i]<-length(which(ptype.temp=='FZRA'))
+  ip.rows<-which(ptype.temp=='IP')
+  fz.rows<-which(ptype.temp=='FZRA')
+  ip.mean<-apply(Twb.prof[train.rows[ip.rows],], 2, mean)
+  fz.mean<-apply(Twb.prof[train.rows[fz.rows],], 2, mean)
+  step.size=seq(0,3000,by=100)
+  plot(ip.mean,step.size,xlab="Temperature (K)", col='red',xlim=range(Twb.prof[,]),ylab="Meters AGL",type="l",main=paste("Mean of IP vs FZRA Set: ", i))
+  abline(v=273.15, col='black')
+  lines(fz.mean, step.size, col='blue')
+  legend('topleft', c('FZRA', 'IP'), col=c('blue', 'red'), pch=19)
   train.bal<-c(sample(which(ptype.temp=='IP'),25),sample(which(ptype.temp=='FZRA'),25) )
   bal.train.rows[[i]]<-train.rows[train.bal]
   bal.cv.rows[[i]]<-train.rows[-train.bal]
@@ -180,7 +192,7 @@ reference.rows<-reference.rows[2:length(reference.rows)]
 
 ## Plotting the IP and FZRA obs from each training set
 step.size=seq(0,3000,by=100)
-par(mfrow=c(2,2))
+par(mfrow=c(1,2))
 for(i in 1:12){
   ip.rows<-bal.train.rows[[i]][1:25]
   fz.rows<-bal.train.rows[[i]][(26):length(bal.train.rows[[i]])]

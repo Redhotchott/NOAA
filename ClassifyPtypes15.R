@@ -4,22 +4,45 @@
 # This classify Ptypes script will attempt 
 # to balance the training classes across 12 
 # traininng sets 12 disjoint testing sets.
-# 90.94% accuracy
-# Now I want to increase the number of each ptype 
-# in the training set. Staying balanced I will 300 of each
-# in each training set. However, since ip<300 for each, 
-# I will add duplicates of each into my training set, to 
-# to reach the 300 balance. 
+# Goal is to beat 90.94% accuracy
+# I want to use 10f, but add in svm of 14b to 
+# increase the differentiation between IP and FZRA
 # Only temp as input
 # Outlyer Snow in miami has been removed. 
 
 rm(list=ls())
-setwd('/Users/tchott/Documents/Capstone')
 load("predictors.RData")
 library(ggplot2)
 library(caret)
 library(plot3D)
 library(e1071)
+library( 'e1071' )
+library('rpart')
+library('dplyr')
+library('parallel')
+library(sn)
+library(fields)
+library(mvtnorm)
+library(foreach)
+library(doSNOW)
+
+create.wt<-function(train.rows.mon){
+  rain.rows=which(ptype[train.rows.mon]=="RA")
+  snow.rows=which(ptype[train.rows.mon]=="SN")
+  pellet.rows=which(ptype[train.rows.mon]=="IP")
+  ice.rows=which(ptype[train.rows.mon]=="FZRA")
+  
+  r.l<-length(rain.rows)
+  s.l<-length(snow.rows)
+  p.l<-length(pellet.rows)
+  i.l<-length(ice.rows)
+  p.lengths<-c(i.l,p.l,r.l,s.l)
+  p.class<-p.lengths!=0
+  
+  ref<-which(p.lengths==min(p.lengths[p.lengths!=0]))
+  class.wts<-p.lengths[ref]/p.lengths[p.class]
+  return(class.wts)
+}
 
 cols=1:32  	#Columns (i.e. levels) of the temperature profiles to be used in the 
 years=as.numeric(substr(dates,1,4))
@@ -31,6 +54,17 @@ date.ind<-date.ind[-41977]
 ptype<-ptype[-41977]
 station.ind<-station.ind[-41977]
 
+ptype.fac<-as.factor(ptype)
+
+Twb.type<-cbind(Twb.prof,ptype.fac) %>% as.data.frame
+colnames(Twb.type)<-c("H0","H1","H2", "H3","H4","H5","H6","H7", "H8","H9","H10","H11","H12","H13","H14","H15","H16","H17","H18","H19","H20","H21","H22","H23","H24","H25","H26","H27","H28","H29","H30","ptype.df")
+attach(Twb.type)
+
+
+years=as.numeric(substr(dates,1,4))
+months=as.numeric(substr(dates,5,6))
+all.months=as.numeric(substr(dates[date.ind],5,6))
+
 displayVTempR <- function(X){
   step.size=seq(0,3000,by=100)
   plot(Twb.prof[X,],step.size,xlab="Temperature (K)", xlim=range(Twb.prof[,]),ylab="Meters AGL",type="l",main=paste("Random Observation of Type: ", ptype[X]))
@@ -40,6 +74,53 @@ displayVTempR <- function(X){
 
 z <- sample(1:nrow(Twb.prof),1)
 displayVTempR(z)
+
+# Setting up the SVM for future use: 
+test.nn=array()
+train.nn=array()
+truth<- array()
+pred<- array()
+zz<-array(NA, c(2,2,12))
+model<-list()
+model.mon<-list()
+res<-list()
+res.mon<-list()
+
+for ( i in 1:12){
+  train.years=1996:2000+i-1
+  test.years=2000+i
+  
+  print(paste('Training Set: ', i))
+  
+  train.labels=head(which((years>=train.years[1] & months >8)),1):tail(which(years<=train.years[5]+1 & months <6),1)
+  test.labels=which((years==test.years & months>8) | (years==test.years+1 & months < 6))
+  
+  
+  train.rows=which(date.ind%in%train.labels)
+  test.rows=which(date.ind%in%test.labels)
+  
+  train.rows.ip=train.rows[which(ptype[train.rows]=='IP')]
+  train.rows.fzra=train.rows[which(ptype[train.rows]=='FZRA')]
+  train.rows=c(train.rows.ip,train.rows.fzra)
+  
+  test.rows.ip=test.rows[which(ptype[test.rows]=='IP')]
+  test.rows.fzra=test.rows[which(ptype[test.rows]=='FZRA')]
+  test.rows=c(test.rows.ip,test.rows.fzra)
+  
+  train.nn[i]=length(train.rows)
+  test.nn[i]=length(test.rows)
+  
+  t.w<-create.wt(train.rows)
+  model.mon[[i]]<-svm( ptype.df~., data=Twb.type[train.rows,],
+                       probability=T, type='C-classification', 
+                       class.weights=c("1"=t.w[1], "2"=t.w[2]))
+  
+#   res.mon[[i]]<-predict(model.mon[[i]], newdata=Twb.type[test.rows,1:31],decision.values=T)
+#   
+#   zz[,,i]<-table(pred = res.mon[[i]], true = Twb.type[test.rows,32])
+#   
+#   print(zz[,,i])
+}
 
 nptype<-matrix(0,nrow=nrow(Twb.prof),ncol=1)  ##Setting up my pytpes as a 4 columns indicating ptype
 for ( i in 1:nrow(Twb.prof)){
@@ -174,10 +255,10 @@ for(i in 1:12){
   ptype.temp<-ptype[train.rows]
   ip.length[i]<-length(which(ptype.temp=='IP'))
   if(i==7){
-  train.bal<-c(sample(which(ptype.temp=='IP'), 300), sample(which(ptype.temp=='SN'),300),sample(which(ptype.temp=='FZRA'),300),sample(which(ptype.temp=='RA'),300))
+    train.bal<-c(sample(which(ptype.temp=='IP'), 300), sample(which(ptype.temp=='SN'),300),sample(which(ptype.temp=='FZRA'),300),sample(which(ptype.temp=='RA'),300))
   }
   else{  train.bal<-c(sample(which(ptype.temp=='IP'), ip.length[i]), sample(which(ptype.temp=='SN'),300),sample(which(ptype.temp=='FZRA'),300),sample(which(ptype.temp=='RA'),300))
-}
+  }
   bal.train.rows[[i]]<-train.rows[train.bal]
   bal.cv.rows[[i]]<-train.rows[-train.bal]
   bal.test.rows[[i]]<-test.rows
@@ -217,6 +298,16 @@ for (i in 1:12){
   predicted_class <- nnetPred(Xcv.proc, set.nnet[[1]])
   print(paste('cv set accuracy:', mean(predicted_class == (ycv))))
   predicted_class <- nnetPred(Xt.proc, set.nnet[[1]])
+  
+  #which rows need to be redetermined.
+  replace<-which(predicted_class==3|predicted_class==4)
+  ip.fzra.rows<-bal.test.rows[[i]][replace]
+  
+  res<-predict(model.mon[[i]], newdata=Twb.type[ip.fzra.rows,1:31], decision.values=T)
+  res<-as.numeric(levels(res))[res]+2
+  
+  predicted_class[replace]<-res
+  
   print(paste('testing accuracy:',mean(predicted_class == (yt))))
   predicted<-c(predicted,predicted_class)
   true<-c(true,nptype[bal.test.rows[[i]]])
