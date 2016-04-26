@@ -5,6 +5,7 @@
 # to balance the training classes across 12 
 # traininng sets 12 disjoint testing sets.
 # Goal is to beat 90.94% accuracy
+# 0.90220212056054
 # I want to use 10f, but add in svm of 14b to 
 # increase the differentiation between IP and FZRA
 # Only temp as input
